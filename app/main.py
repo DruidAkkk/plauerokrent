@@ -16,12 +16,35 @@ import webview
 
 from app.backend import Backend
 
-WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
+
+def _is_frozen() -> bool:
+    return getattr(sys, "frozen", False)
+
+
+def _web_dir() -> str:
+    """Папка веб-ресурсов: из бандла PyInstaller (sys._MEIPASS) или рядом с исходником."""
+    if _is_frozen():
+        return os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "web")
+    return os.path.join(os.path.dirname(__file__), "web")
+
+
+def _default_db() -> str:
+    """БД: в установленной сборке — пользовательская папка (Program Files только для чтения),
+    в dev-режиме — рядом с проектом (прежнее поведение)."""
+    if _is_frozen():
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        d = os.path.join(base, "rentbot")
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, "rentbot.db")
+    return os.path.join(os.getcwd(), "rentbot.db")
+
+
+WEB_DIR = _web_dir()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=os.path.join(os.getcwd(), "rentbot.db"))
+    ap.add_argument("--db", default=_default_db())
     ap.add_argument("--debug", action="store_true", help="открыть DevTools")
     args = ap.parse_args()
 

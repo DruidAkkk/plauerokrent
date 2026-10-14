@@ -9,12 +9,23 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from urllib import error as urlerror
 from urllib import request as urlreq
 
 DEFAULT_PORT = int(os.environ.get("RENTBOT_SIDECAR_PORT", "8799"))
-SIDECAR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "sidecar")
+
+
+def _sidecar_dir() -> str:
+    """Папка Node-сайдкара: из бандла PyInstaller (sys._MEIPASS/sidecar) в установленной
+    сборке, иначе — рядом с проектом (dev-режим)."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(getattr(sys, "_MEIPASS", ""), "sidecar")
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "sidecar")
+
+
+SIDECAR_DIR = _sidecar_dir()
 
 
 def _base(port: int) -> str:

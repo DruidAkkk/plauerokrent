@@ -44,4 +44,7 @@ Thumbs.db
 *.swp
 build/
 dist/
-*.spec
+# артефакты сборки установщика (большие; сами скрипты packaging/* в репо остаются)
+packaging/dist/
+packaging/build/
+packaging/installer_out/
