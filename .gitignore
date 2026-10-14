@@ -1,0 +1,47 @@
+# ---- секреты и данные (НИКОГДА не коммитить) ----
+# Зашифрованный сейф владельца: maFile, пароли, токены, ключ KoSell, email/IMAP и т.д.
+*.db
+*.db-wal
+*.db-shm
+rentbot.db*
+# Явные секреты/конфиги с ключами
+.env
+.env.*
+*.env
+secrets.*
+*secret*
+*.maFile
+maFiles/
+# Ключи/сертификаты
+*.pem
+*.key
+*.pfx
+*.p12
+
+# ---- окружение и зависимости ----
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node (сайдкар Steam)
+sidecar/node_modules/
+node_modules/
+npm-debug.log*
+
+# ---- служебное ----
+.claude/
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+*.swp
+build/
+dist/
+*.spec

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rentbot — панель владельца</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ЭКРАН БЛОКИРОВКИ -->
+  <div id="lock">
+    <div class="lock-card">
+      <div class="lock-logo"><span class="dot"></span><b>rentbot</b></div>
+      <h2 id="lock-title">Вход</h2>
+      <p class="hint" id="lock-hint">Логин и мастер-пароль. Пароль — он же ключ шифрования; данные не покидают эту машину.</p>
+      <div id="lock-step-creds">
+        <label for="username">Логин</label>
+        <input type="text" id="username" autocomplete="username">
+        <label for="mp" style="margin-top:12px">Мастер-пароль</label>
+        <input type="password" id="mp" autocomplete="current-password">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-dim)">
+          <input type="checkbox" id="remember" style="width:auto"> запомнить на этом устройстве
+        </label>
+      </div>
+      <div id="lock-step-2fa" style="display:none">
+        <label for="code2fa">Код из Telegram</label>
+        <input type="text" id="code2fa" placeholder="6 цифр" autocomplete="one-time-code" inputmode="numeric">
+      </div>
+      <div class="lock-err" id="lock-err"></div>
+      <button class="btn primary" id="lock-btn" style="width:100%">Войти</button>
+    </div>
+  </div>
+
+  <!-- ПРИЛОЖЕНИЕ -->
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="dot"></span><b>rentbot</b></div>
+      <nav class="nav" id="nav">
+        <a data-view="dashboard" class="active">📊 Дашборд</a>
+        <a data-view="plugins">🧩 Плагины</a>
+        <a data-view="blacklist">🚫 Чёрный список</a>
+        <a data-view="automation">⚙️ Автоматизация</a>
+        <a data-view="logs">📜 Логи</a>
+        <a data-view="settings">🔧 Настройки</a>
+      </nav>
+      <div class="side-foot">
+        <div class="worker" id="worker"><span class="led"></span><span id="worker-text">воркер остановлен</span></div>
+        <button class="btn sm ghost" id="btn-worker">Запустить воркер</button>
+        <button class="btn sm ghost" id="btn-lock">🔒 Заблокировать</button>
+      </div>
+    </aside>
+
+    <main class="main" id="main"></main>
+  </div>
+
+  <!-- МОДАЛКА (универсальная) -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <header><h3 id="modal-title"></h3><button class="close" id="modal-close">×</button></header>
+      <div class="content" id="modal-content"></div>
+      <footer>
+        <button class="btn" id="modal-cancel">Отмена</button>
+        <button class="btn primary" id="modal-ok">Сохранить</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

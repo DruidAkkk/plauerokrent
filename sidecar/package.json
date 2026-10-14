@@ -1,0 +1,14 @@
+{
+  "name": "rentbot-steam-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node-сайдкар для Steam: вход/проверка через steam-session (путь B, когда steampy нестабилен)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "steam-session": "^1.9.0",
+    "steam-totp": "^2.1.2"
+  }
+}

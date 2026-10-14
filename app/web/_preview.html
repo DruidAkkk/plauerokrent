@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rentbot — панель (ПРЕВЬЮ)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Это дев-превью: window.__MOCK_API__ эмулирует бэкенд, чтобы смотреть вёрстку в браузере.
+       В проде используется index.html + реальный Python-мост (app/main.py). -->
+  <div id="lock">
+    <div class="lock-card">
+      <div class="lock-logo"><span class="dot"></span><b>rentbot</b></div>
+      <h2 id="lock-title">Вход</h2>
+      <p class="hint" id="lock-hint"></p>
+      <div id="lock-step-creds">
+        <label for="username">Логин</label>
+        <input type="text" id="username" value="seller">
+        <label for="mp" style="margin-top:12px">Мастер-пароль</label>
+        <input type="password" id="mp" value="demo">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-dim)">
+          <input type="checkbox" id="remember" style="width:auto"> запомнить на этом устройстве
+        </label>
+      </div>
+      <div id="lock-step-2fa" style="display:none">
+        <label for="code2fa">Код из Telegram</label>
+        <input type="text" id="code2fa" placeholder="6 цифр" inputmode="numeric">
+      </div>
+      <div class="lock-err" id="lock-err"></div>
+      <button class="btn primary" id="lock-btn" style="width:100%">Войти</button>
+    </div>
+  </div>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="dot"></span><b>rentbot</b></div>
+      <nav class="nav" id="nav">
+        <a data-view="dashboard" class="active">📊 Дашборд</a>
+        <a data-view="plugins">🧩 Плагины</a>
+        <a data-view="automation">⚙️ Автоматизация</a>
+        <a data-view="logs">📜 Логи</a>
+        <a data-view="settings">🔧 Настройки</a>
+      </nav>
+      <div class="side-foot">
+        <div class="worker" id="worker"><span class="led"></span><span id="worker-text">воркер остановлен</span></div>
+        <button class="btn sm ghost" id="btn-worker">Запустить воркер</button>
+        <button class="btn sm ghost" id="btn-lock">🔒 Заблокировать</button>
+      </div>
+    </aside>
+    <main class="main" id="main"></main>
+  </div>
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <header><h3 id="modal-title"></h3><button class="close" id="modal-close">×</button></header>
+      <div class="content" id="modal-content"></div>
+      <footer><button class="btn" id="modal-cancel">Отмена</button><button class="btn primary" id="modal-ok">Сохранить</button></footer>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <script>
+  /* ---- мок-бэкенд: та же форма ответов, что и app/backend.py ---- */
+  (function () {
+    const now = Date.now() / 1000;
+    const state = {
+      initialized: true, unlocked: false, worker: false,
+      accounts: [
+        { id: 1, game: "cs2", login: "cs_prime_01", state: "rented", state_ru: "в аренде", proxy: "http://p1:8000", note: "", tags: ["faceit_verified", "prime"], has_guard: true, has_mafile: true },
+        { id: 2, game: "cs2", login: "cs_prime_02", state: "free", state_ru: "свободен", proxy: "", note: "куплен 09.2026", tags: ["prime"], has_guard: true, has_mafile: true },
+        { id: 3, game: "dota2", login: "dota_mmr_01", state: "resting", state_ru: "отдых", proxy: "http://p2:8000", note: "", tags: ["2k_mmr"], has_guard: true, has_mafile: true },
+        { id: 4, game: "faceit", login: "faceit_lvl10", state: "quarantine", state_ru: "карантин", proxy: "", note: "не сменился пароль", tags: ["faceit_verified"], has_guard: true, has_mafile: true },
+        { id: 5, game: "cs2", login: "cs_prime_05", state: "rotating", state_ru: "ротация", proxy: "", note: "", tags: [], has_guard: false, has_mafile: false },
+      ],
+      lots: [
+        { marketplace: "playerok", lot_id: "a1b2c3", title: "CS2 Prime 6ч автовыдача", game: "cs2", hours: 6, rotation: "auto" },
+        { marketplace: "playerok", lot_id: "d4e5f6", title: "Dota 2 аренда 4ч", game: "dota2", hours: 4, rotation: "auto" },
+      ],
+      rentals: {
+        active: [{ id: 11, buyer_name: "player_777", lot_id: "a1b2c3", account_id: 1, started_at: now - 5400, ends_at: now + 16200, price: 149 }],
+        queued: [{ id: 12, buyer_name: "noob2010", lot_id: "a1b2c3", account_id: null, started_at: 0, ends_at: 0, price: 149 }],
+        ended: [
+          { id: 7, buyer_name: "mid_or_feed", lot_id: "d4e5f6", account_id: 3, started_at: now - 100000, ends_at: now - 85600, price: 120 },
+          { id: 8, buyer_name: "awper_1", lot_id: "a1b2c3", account_id: 2, started_at: now - 190000, ends_at: now - 168000, price: 149 },
+        ],
+        cancelled: [],
+      },
+      events: [
+        { ts: now - 60, kind: "issue", rental_id: 11, account_id: 1, data: '{"login":"cs…1"}' },
+        { ts: now - 55, kind: "code", rental_id: 11, account_id: 1, data: "{}" },
+        { ts: now - 5400, kind: "queued", rental_id: 12, account_id: null, data: "{}" },
+        { ts: now - 85600, kind: "rotated", rental_id: 7, account_id: 3, data: "{}" },
+        { ts: now - 86000, kind: "rotate_fail", rental_id: null, account_id: 4, data: '{"err":"timeout"}' },
+      ],
+    };
+    const util = [
+      { login: "cs_prime_01", rentals: 14, revenue: 2086, utilization: 62.4 },
+      { login: "cs_prime_02", rentals: 9, revenue: 1341, utilization: 41.0 },
+      { login: "dota_mmr_01", rentals: 6, revenue: 720, utilization: 23.7 },
+      { login: "faceit_lvl10", rentals: 3, revenue: 525, utilization: 11.2 },
+    ];
+    const ok = (x) => Promise.resolve(Object.assign({ ok: true }, x));
+    window.__MOCK_API__ = {
+      status: () => ok({ initialized: state.initialized, unlocked: state.unlocked, username: state.username || "seller", worker: state.worker, db_path: "rentbot.db" }),
+      resume: () => ok({ resumed: false }),
+      setup: (p, user, remember) => { state.unlocked = true; state.username = user || "seller"; return ok(); },
+      unlock: (p, user, remember) => { if (p !== "demo") return Promise.resolve({ error: "Неверный логин или пароль" }); if (state.twofa) return Promise.resolve({ ok: false, need_2fa: true, message: "Код отправлен в Telegram" }); state.unlocked = true; return ok(); },
+      verify_2fa: (code) => code === "12345" ? (state.unlocked = true, ok()) : Promise.resolve({ error: "Неверный код (в демо 12345)" }),
+      lock: () => { state.unlocked = false; return ok(); },
+      security_get: () => ok({ username: state.username || "seller", twofa_enabled: !!state.twofa, tg_ready: !!state.tg.token }),
+      security_set: (d) => { if (d.username !== undefined) state.username = d.username; if (d.twofa_enabled !== undefined) { if (d.twofa_enabled && !state.tg.token) return Promise.resolve({ error: "Сначала настройте Telegram ниже" }); state.twofa = !!d.twofa_enabled; } return ok(); },
+      worker_toggle: () => { state.worker = !state.worker; return ok({ worker: state.worker }); },
+      dashboard: () => ok({
+        revenue_month: 4672, rentals_month: 32, active: state.rentals.active.length, queued: state.rentals.queued.length,
+        accounts_total: state.accounts.length, quarantine: state.accounts.filter(a => a.state === "quarantine").length,
+        accounts_by_state: state.accounts.reduce((m, a) => (m[a.state_ru] = (m[a.state_ru] || 0) + 1, m), {}),
+        utilization: util,
+      }),
+      accounts: () => ok({ items: state.accounts }),
+      account_login_check: (id) => new Promise((res) => setTimeout(() => { const a = state.accounts.find(x => x.id === id); res({ ok: true, login_ok: !!(a && a.has_mafile), message: a && a.has_mafile ? "вход выполнен, сессия активна" : "нет maFile — Guard при входе не пройти" }); }, 1500)),
+      account_check: (id) => { const a = state.accounts.find(x => x.id === id); if (!a) return Promise.resolve({ error: "нет аккаунта" }); if (!a.has_guard) return ok({ has_guard: false, login: a.login, message: "У аккаунта нет shared_secret (maFile не задан)." }); const A = "23456789BCDFGHJKMNPQRTVWXY"; let c = ""; for (let i = 0; i < 5; i++) c += A[Math.floor(Math.random() * A.length)]; return ok({ has_guard: true, login: a.login, code: c, seconds_left: 30 - (Math.floor(Date.now() / 1000) % 30) }); },
+      add_account: (d) => {
+        if (!d.login || !d.game || !d.password) return Promise.resolve({ error: "Нужны логин, игра и пароль" });
+        if (state.accounts.some(a => a.login === d.login)) return Promise.resolve({ error: "Такой логин уже есть" });
+        state.accounts.push({ id: state.accounts.length + 1, game: d.game, login: d.login, state: "free", state_ru: "свободен", proxy: d.proxy || "", note: d.note || "", tags: (d.tags || "").split(",").map(s => s.trim()).filter(Boolean), has_guard: !!d.mafile, has_mafile: !!d.mafile });
+        return ok({ id: state.accounts.length });
+      },
+      account_update: (d) => { const a = state.accounts.find(x => x.id === d.account_id); if (!a) return Promise.resolve({ error: "нет аккаунта" }); if (d.game) { a.game = d.game; } if (d.state) { a.state = d.state; a.state_ru = ({ free: "свободен", paused: "выключен", quarantine: "карантин", resting: "отдых", rented: "в аренде", rotating: "ротация" })[d.state] || d.state; } a.proxy = d.proxy || ""; a.note = d.note || ""; a.tags = (d.tags || "").split(",").map(s => s.trim()).filter(Boolean); if (d.mafile) { a.has_mafile = true; a.has_guard = true; } return ok(); },
+      account_delete: (id) => { const a = state.accounts.find(x => x.id === id); if (a && (a.state === "rented" || a.state === "rotating")) return Promise.resolve({ error: "Нельзя удалить: аккаунт сейчас «" + a.state_ru + "»." }); state.accounts = state.accounts.filter(x => x.id !== id); return ok(); },
+      lots: () => ok({ items: state.lots }),
+      bind_lot: (d) => { if (!d.lot_id || !d.game || !(d.hours > 0)) return Promise.resolve({ error: "Нужны lot_id, игра и часы > 0" }); state.lots.push({ marketplace: d.marketplace || "playerok", lot_id: d.lot_id, title: d.title || "", game: d.game, hours: +d.hours, rotation: d.rotation || "auto" }); return ok(); },
+      rentals: () => ok({ groups: state.rentals }),
+      events: () => ok({ items: state.events }),
+      rental_events: () => ok({ items: state.events.filter(e => ["issue", "code", "extend", "end", "rotated", "rotate_fail", "queued", "rotated_manual"].includes(e.kind)) }),
+      rental_settings_get: () => ok({ bonus_5star_hours: state.rentalBonus || 0 }),
+      rental_settings_set: (d) => { state.rentalBonus = +d.bonus_5star_hours; return ok(); },
+      blacklist_list: () => ok({ items: state.bl }),
+      blacklist_add: (d) => { if (!d.buyer_id) return Promise.resolve({ error: "Нужен ID" }); const e = state.bl.find(x => x.buyer_id === d.buyer_id); if (e) { e.enabled = true; e.reason = d.reason || e.reason; e.source = "local"; } else state.bl.push({ marketplace: "playerok", buyer_id: d.buyer_id, reason: d.reason || "без причины", source: "local", enabled: true }); return ok(); },
+      blacklist_remove: (mk, id) => { const e = state.bl.find(x => x.buyer_id === id); if (e) { if (e.source === "global") e.enabled = false; else state.bl = state.bl.filter(x => x.buyer_id !== id); } return ok(); },
+      blacklist_sync: () => { const demo = [["demo_scam_001", "не вернул аккаунт (demo)"], ["demo_scam_002", "чарджбэк (demo)"], ["demo_scam_003", "угон аккаунта (demo)"]]; let added = 0; demo.forEach(([id, reason]) => { if (!state.bl.find(x => x.buyer_id === id)) { state.bl.push({ marketplace: "playerok", buyer_id: id, reason, source: "global", enabled: true }); added++; } }); return ok({ added, total: demo.length, source: "demo" }); },
+      seed_demo: () => Promise.resolve({ error: "В базе уже есть аккаунты" }),
+      // базовые функции
+      delivery_list: () => ok({ items: state.delivery }),
+      delivery_set: (d) => { const i = state.delivery.findIndex(x => x.lot_id === d.lot_id); const row = { marketplace: "playerok", lot_id: d.lot_id, mode: d.mode, template: d.template || "", enabled: d.enabled !== false, stock: d.mode === "keys" ? 0 : undefined }; i >= 0 ? state.delivery[i] = row : state.delivery.push(row); return ok(); },
+      stock_add: (mk, lot, txt) => { const n = txt.split("\n").filter(s => s.trim()).length; const row = state.delivery.find(x => x.lot_id === lot); if (row) row.stock = (row.stock || 0) + n; return ok({ added: n, stock: row ? row.stock : n }); },
+      autoresponses_list: () => ok({ items: state.autoresp }),
+      autoresponse_add: (d) => { if (!d.reply || (d.kind === "keyword" && !d.pattern)) return Promise.resolve({ error: "Заполните поля" }); state.autoresp.push({ id: Date.now(), kind: d.kind, pattern: d.pattern || "", reply: d.reply, enabled: true }); return ok(); },
+      autoresponse_delete: (id) => { state.autoresp = state.autoresp.filter(r => r.id !== id); return ok(); },
+      bump_list: () => ok({ items: state.bump }),
+      bump_set: (d) => { if (d.enabled && d.interval_min < 30) return Promise.resolve({ error: "Антибан: минимум 30 минут" }); const i = state.bump.findIndex(x => x.lot_id === d.lot_id); const row = { marketplace: "playerok", lot_id: d.lot_id, enabled: !!d.enabled, interval_sec: d.interval_min * 60, last_bump: 0 }; i >= 0 ? state.bump[i] = row : state.bump.push(row); return ok(); },
+      settings_get: () => ok({ tg_token_set: !!state.tg.token, tg_token_mask: state.tg.token ? state.tg.token.slice(0, 6) + "…" + state.tg.token.slice(-4) : "", tg_chat: state.tg.chat, pl_token_set: !!state.tg.pl, pl_token_mask: state.tg.pl ? state.tg.pl.slice(0, 6) + "…" + state.tg.pl.slice(-4) : "", pl_proxy: state.tg.proxy || "", pl_auth_method: state.tg.method || "cookie", pl_email: state.tg.email || "" }),
+      settings_set: (d) => { if (d.tg_token) state.tg.token = d.tg_token; if (d.tg_chat !== undefined) state.tg.chat = d.tg_chat; if (d.pl_token) { state.tg.pl = d.pl_token; state.tg.method = "cookie"; } if (d.pl_proxy !== undefined) state.tg.proxy = d.pl_proxy; if (d.pl_auth_method) state.tg.method = d.pl_auth_method; return ok(); },
+      pl_check_connection: () => new Promise(r => setTimeout(() => { if (!state.tg.pl) r({ ok: true, connected: false, message: "Не подключено" }); else r({ ok: true, connected: true, method: state.tg.method, username: state.tg.method === "email" ? "seller_demo" : "RobuxBestPrice", unread: 3 }); }, 1000)),
+      pl_email_request_code: (email) => email && email.includes("@") ? new Promise(r => setTimeout(() => r({ ok: true, message: "Код отправлен на " + email + ". Проверьте почту." }), 1200)) : Promise.resolve({ error: "Введите корректный email" }),
+      pl_email_submit_code: (email, code) => new Promise(r => setTimeout(() => { if (code === "12345") { state.tg.pl = "token-from-email-abc123"; state.tg.method = "email"; state.tg.email = email; r({ ok: true, username: "seller_demo" }); } else r({ error: "неверный код (в демо подойдёт 12345)" }); }, 1200)),
+    };
+    Object.assign(state, {
+      delivery: [
+        { marketplace: "playerok", lot_id: "a1b2c3", mode: "keys", template: "", enabled: true, stock: 14 },
+        { marketplace: "playerok", lot_id: "x9y8z7", mode: "text", template: "Спасибо, {buyer}! Логин: demo / Пароль: demo123", enabled: true },
+      ],
+      autoresp: [
+        { id: 1, kind: "greeting", pattern: "", reply: "Здравствуйте! Автовыдача — сразу после оплаты. По вопросам пишите, отвечу быстро.", enabled: true },
+        { id: 2, kind: "keyword", pattern: "prime", reply: "Да, аккаунт с Prime Status.", enabled: true },
+        { id: 3, kind: "keyword", pattern: "гарант", reply: "Гарантия на весь срок аренды, замена при проблемах.", enabled: true },
+      ],
+      bump: [
+        { marketplace: "playerok", lot_id: "a1b2c3", enabled: true, interval_sec: 14400, last_bump: now - 3600 },
+        { marketplace: "playerok", lot_id: "x9y8z7", enabled: false, interval_sec: 14400, last_bump: 0 },
+      ],
+      tg: { token: "7712345678:AAHxyz", chat: "123456789", pl: "eyJhbGci0Oabc...tokenXYZ", proxy: "" },
+      bl: [{ marketplace: "playerok", buyer_id: "scammer_vasya", reason: "не вернул аккаунт", source: "local", enabled: true }],
+      rentalBonus: 1,
+      username: "seller", twofa: true,
+    });
+  })();
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

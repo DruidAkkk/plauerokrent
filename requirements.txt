@@ -1,0 +1,11 @@
+# Ядро + тесты
+cryptography>=42
+# Боевые адаптеры (не нужны для тестов движка)
+curl_cffi>=0.7        # Cloudflare-обход, TLS-отпечаток браузера для Playerok
+websockets>=12        # подписки wss://ws.playerok.com/graphql
+aiogram>=3.4          # Telegram-панель владельца
+APScheduler>=3.10     # персистентные таймеры аренд
+steampy>=1.2          # Steam: логин/Guard/подтверждения (путь A для backend.rotate_credentials)
+# Десктоп-панель владельца (app/)
+pywebview>=5.0        # нативное окно WebView2 (Win) поверх HTML/JS UI
+pythonnet>=3.0        # бэкенд WebView2 для pywebview на Windows
