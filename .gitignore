@@ -48,3 +48,5 @@ dist/
 packaging/dist/
 packaging/build/
 packaging/installer_out/
+# портативный node.exe (90 МБ) — копируется при сборке, см. BUILD.md
+packaging/node/

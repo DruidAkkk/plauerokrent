@@ -14,6 +14,11 @@ ROOT = os.path.abspath(os.getcwd())
 
 datas = [(os.path.join(ROOT, "app", "web"), "web"),
          (os.path.join(ROOT, "sidecar"), "sidecar")]
+
+# Портативный node.exe — чтобы Steam-сайдкар работал у клиента без установки Node.
+_node = os.path.join(ROOT, "packaging", "node", "node.exe")
+if os.path.isfile(_node):
+    datas.append((_node, "node"))
 binaries = []
 hiddenimports = []
 

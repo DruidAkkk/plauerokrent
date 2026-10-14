@@ -21,6 +21,10 @@
 
 ## Сборка (из корня проекта)
 ```bash
+# 0) портативный node.exe для Steam-сайдкара (чтобы работал без установки Node у клиента)
+#    копируем системный node.exe (или качаем официальный x64-билд) в packaging/node/
+mkdir -p packaging/node && cp "/c/Program Files/nodejs/node.exe" packaging/node/node.exe
+
 # 1) иконка (если менялась)
 .venv/Scripts/python packaging/make_icon.py
 
@@ -39,10 +43,9 @@
 - Ярлыки: меню «Пуск» и (опционально) рабочий стол.
 
 ## Известные ограничения / дальше
-- **Node-сайдкар**: в рантайме Steam-кик и проверка входа требуют `node` в PATH. Всё остальное
-  (KoSell, PUBG, Playerok, Guard-коды) работает без Node. Чтобы «просто работало» у клиента —
-  следующий шаг: вложить портативный `node.exe` или скомпилировать сайдкар в exe (vercel/pkg,
-  node SEA) и указать на него в `rentbot/steam/sidecar.py` (ensure_running).
+- **Node-сайдкар**: портативный `node.exe` вкладывается в сборку (`packaging/node/` → `_internal/node/`),
+  и `rentbot/steam/sidecar.py` (`_node_exe`) при фризе берёт именно его. Поэтому Steam-кик и проверка
+  входа работают у клиента БЕЗ установки Node. В dev-режиме используется системный node из PATH.
 - **WebView2**: на Windows 10/11 обычно уже установлен (Edge). Если нет — добавить в установщик
   бутстраппер MicrosoftEdgeWebview2Setup.exe.
 - **macOS**: сборка DMG требует Mac (PyInstaller + create-dmg). Пока только Windows.

@@ -40,9 +40,19 @@ def is_running(port: int = DEFAULT_PORT, timeout: float = 2.0) -> bool:
         return False
 
 
+def _node_exe() -> str | None:
+    """Путь к node: вложенный портативный node.exe в установленной сборке (sys._MEIPASS/node),
+    иначе системный node из PATH. Так Steam-сайдкар работает у клиента без установки Node."""
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "node", "node.exe")
+        if os.path.isfile(bundled):
+            return bundled
+    return shutil.which("node")
+
+
 def available() -> bool:
-    """Установлены ли node и зависимости сайдкара (можно ли вообще запустить)."""
-    return bool(shutil.which("node")) and \
+    """Доступны ли node и зависимости сайдкара (можно ли вообще запустить)."""
+    return bool(_node_exe()) and \
         os.path.isfile(os.path.join(SIDECAR_DIR, "index.js")) and \
         os.path.isdir(os.path.join(SIDECAR_DIR, "node_modules"))
 
@@ -53,7 +63,7 @@ def ensure_running(port: int = DEFAULT_PORT) -> bool:
         return True
     if not available():
         return False
-    node = shutil.which("node")
+    node = _node_exe()
     env = {**os.environ, "RENTBOT_SIDECAR_PORT": str(port)}
     flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW — без лишнего окна консоли
     try:
