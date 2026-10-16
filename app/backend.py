@@ -26,6 +26,7 @@ from rentbot.storage import Storage
 from rentbot.vault import ENV_SALT, ENV_SECRET, Vault, env_configured
 
 VAULT_MAGIC = "rentbot-vault-v1"       # что шифруем в верификатор
+WEEK = 7 * 24 * 3600
 MONTH = 30 * 24 * 3600
 
 STATE_RU = {
@@ -329,14 +330,16 @@ class Backend:
 
     # ---------- дашборд ----------
     @_api
-    def dashboard(self) -> dict:
+    def dashboard(self, period: str = "month") -> dict:
         s = self._require()
         now = time.time()
+        period = period if period in ("week", "month") else "month"
+        span = WEEK if period == "week" else MONTH
         accounts = s.list_accounts()
         by_state: dict[str, int] = {}
         for a in accounts:
             by_state[a.state.value] = by_state.get(a.state.value, 0) + 1
-        st = s.stats(since=now - MONTH)
+        st = s.stats(since=now - span)
 
         # сводка «сегодня» по всем плагинам (Steam-аренда + KoSell + PUBG Mobile)
         lt = time.localtime()
@@ -351,6 +354,7 @@ class Backend:
 
         return {
             "ok": True,
+            "period": period,
             "revenue_month": round(st["revenue"], 2),
             "rentals_month": st["rentals"],
             "active": len(s.rentals_by_state(RentalState.ACTIVE)),

@@ -182,9 +182,12 @@ $("#btn-lock").onclick = async () => {
 };
 
 /* ---------- дашборд ---------- */
+let dashPeriod = "month";
 VIEWS.dashboard = async () => {
-  const d = await api("dashboard");
+  const d = await api("dashboard", dashPeriod);
   if (d.error) return fail(d.error);
+  const perLabel = d.period === "week" ? "за неделю" : "за месяц";
+  const perDays = d.period === "week" ? "7 дней" : "30 дней";
   const chips = Object.entries(d.accounts_by_state)
     .map(([k, v]) => `<span class="chip">${esc(k)}: ${v}</span>`).join("") || "<span class='chip'>пусто</span>";
   const util = (d.utilization || []).filter((a) => a.rentals > 0 || a.utilization > 0);
@@ -195,11 +198,15 @@ VIEWS.dashboard = async () => {
 
   const t = d.today || {}, pl = d.plugins || {};
   const ko = pl.kosell || {}, mob = pl.mobile || {};
-  setMain("Дашборд", "сводка за последние 30 дней", `
+  setMain("Дашборд", `сводка за последние ${perDays}`, `
+    <div class="tabs" style="margin-bottom:14px">
+      <button class="${d.period === "week" ? "active" : ""}" data-period="week">Неделя</button>
+      <button class="${d.period === "month" ? "active" : ""}" data-period="month">Месяц</button>
+    </div>
     <div class="kpis">
       <div class="kpi g"><div class="ic">✅</div><div class="label">Выдач сегодня</div><div class="value">${t.total ?? 0}</div></div>
-      <div class="kpi"><div class="ic">💰</div><div class="label">Выручка за месяц</div><div class="value">${money(d.revenue_month)} <small>₽</small></div></div>
-      <div class="kpi v"><div class="ic">▶️</div><div class="label">Аренд за месяц</div><div class="value">${d.rentals_month}</div></div>
+      <div class="kpi"><div class="ic">💰</div><div class="label">Выручка ${perLabel}</div><div class="value">${money(d.revenue_month)} <small>₽</small></div></div>
+      <div class="kpi v"><div class="ic">▶️</div><div class="label">Аренд ${perLabel}</div><div class="value">${d.rentals_month}</div></div>
       <div class="kpi a ${d.quarantine ? "danger" : ""}"><div class="ic">${d.quarantine ? "⚠️" : "🛡️"}</div><div class="label">В карантине</div><div class="value">${d.quarantine}</div></div>
     </div>
     <div class="card"><h3>Состояние плагинов</h3><div class="body">
@@ -211,7 +218,7 @@ VIEWS.dashboard = async () => {
       </tbody></table>
     </div></div>
     <div class="card"><h3>Состояние пула Steam (${d.accounts_total} аккаунтов)</h3><div class="body" style="padding:16px 18px">${chips}</div></div>
-    <div class="card"><h3>Загрузка аккаунтов Steam</h3><div class="body">
+    <div class="card"><h3>Загрузка аккаунтов Steam (${perLabel})</h3><div class="body">
       <table><thead><tr><th>Логин</th><th>Аренд</th><th>Выручка</th><th>Загрузка</th></tr></thead><tbody>${rows}</tbody></table>
     </div></div>
     <div class="card"><h3>📤 Экспорт</h3><div class="body" style="padding:16px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -219,6 +226,9 @@ VIEWS.dashboard = async () => {
       <span class="sub">Все продажи по плагинам (Steam / KoSell / PUBG) одной таблицей — открывается в Excel/Google Sheets.</span>
     </div></div>
   `);
+  document.querySelectorAll("[data-period]").forEach((b) => (b.onclick = () => {
+    dashPeriod = b.dataset.period; VIEWS.dashboard();
+  }));
   $("#dash-export-csv").onclick = async (e) => {
     const btn = e.currentTarget; btn.disabled = true;
     const r = await api("export_sales_csv");
