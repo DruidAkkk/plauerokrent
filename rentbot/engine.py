@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 
+from . import review_request
 from .domain import (Account, AccountState, LotBinding, Rental, RentalState,
                      RotationMode)
 from .ports import Marketplace, Notifier, OrderEvent, SteamBackend
@@ -162,6 +163,8 @@ class RentalEngine:
         except Exception:
             pass
         self.s.log("end", rent.id, rent.account_id)
+        # Вежливая просьба об отзыве (один раз на сделку, только при нормальном завершении).
+        await review_request.ask_after_completion(self.s, self.mk, rent.chat_id, order_id=rent.deal_id)
         if rent.account_id is not None:
             await self._secure_account(rent.account_id)
 

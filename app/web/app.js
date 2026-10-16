@@ -255,6 +255,14 @@ VIEWS.plugins = async () => {
           <button class="btn primary" id="open-repricer">Открыть →</button>
         </div>
       </div>
+      <div class="card" style="margin:0;cursor:pointer" id="plg-review">
+        <h3 style="border:none">⭐ Просьба об отзыве</h3>
+        <div class="body" style="padding:0 18px 16px">
+          <span class="badge-state s-active" id="plg-review-badge">активен</span>
+          <p class="sub" style="margin:12px 0 14px;line-height:1.5">После успешного завершения аренды (Steam / KoSell / PUBG) бот вежливо просит покупателя оставить отзыв. Текст сообщения настраивается. По умолчанию выключено.</p>
+          <button class="btn primary" id="open-review">Открыть →</button>
+        </div>
+      </div>
       <div class="card" style="margin:0;cursor:pointer" id="plg-mobile">
         <h3 style="border:none">📱 Аренда PUBG Mobile</h3>
         <div class="body" style="padding:0 18px 16px">
@@ -279,6 +287,7 @@ VIEWS.plugins = async () => {
   $("#plg-kosell").onclick = openK;
   $("#open-warranty").onclick = $("#plg-warranty").onclick = renderWarranty;
   $("#open-repricer").onclick = $("#plg-repricer").onclick = renderRepricer;
+  $("#open-review").onclick = $("#plg-review").onclick = renderReview;
   $("#open-mobile").onclick = $("#plg-mobile").onclick = openMobilePlugin;
 };
 
@@ -583,6 +592,40 @@ async function renderWarranty() {
     const r = await api("warranty_resolve", +b.dataset.wres);
     r.ok ? (toast("Закрыто", "ok"), renderWarranty()) : toast(r.error || "ошибка", "err");
   }));
+}
+
+/* ---- плагин Просьба об отзыве ---- */
+const REVIEW_SUB = "вежливая просьба об отзыве после успешного завершения аренды";
+VIEWS.review = renderReview;
+async function renderReview() {
+  simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB,
+    `<div class="card"><div class="body" style="padding:18px">Загрузка…</div></div>`);
+  const r = await api("review_get");
+  if (!r.ok) return simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB,
+    `<div class="card"><div class="body" style="padding:18px;color:var(--amber)">⚠️ ${esc(r.error || "ошибка")}</div></div>`);
+  const text = r.text || r.default || "";
+  simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB, `
+    <div class="card"><h3>⚙️ Настройки</h3><div class="body" style="padding:18px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="rev-en" ${r.enabled ? "checked" : ""} style="width:auto">
+        Включить просьбу об отзыве</label>
+      <div class="field" style="margin-top:16px">
+        <label>Текст сообщения покупателю</label>
+        <textarea id="rev-text" rows="4" placeholder="${esc(r.default || "")}">${esc(text)}</textarea>
+        <div class="sub" style="margin-top:6px">Отправляется один раз, только после успешного завершения сделки (не при споре/возврате). Пусто — будет использован текст по умолчанию.</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+        <button class="btn primary" id="rev-save">Сохранить</button>
+        <button class="btn ghost" id="rev-default">Текст по умолчанию</button>
+      </div>
+      <div class="sub" style="margin-top:14px;color:var(--amber)">⚠️ Просим честный отзыв, без «платы за 5★» — это безопасно, в отличие от накрутки. Работает для всех видов аренды: Steam, KoSell и PUBG Mobile.</div>
+    </div></div>
+  `);
+  $("#rev-save").onclick = async () => {
+    const res = await api("review_set", { enabled: $("#rev-en").checked, text: $("#rev-text").value });
+    res.ok ? toast("Сохранено", "ok") : toast(res.error || "ошибка", "err");
+  };
+  $("#rev-default").onclick = () => { $("#rev-text").value = r.default || ""; };
 }
 
 /* ---- плагин Репрайсер (рыночная статистика по всем лотам Playerok) ---- */

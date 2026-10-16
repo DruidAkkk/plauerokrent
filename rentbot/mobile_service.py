@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from . import mobile_otp
+from . import mobile_otp, review_request
 from .ports import ChatMessage, Marketplace, Notifier, OrderEvent
 from .storage import Storage
 
@@ -173,3 +173,5 @@ class MobileFulfiller:
             await self.note.notify(
                 f"⌛ PUBG Mobile: аренда {row.get('login','')} истекла (заказ {row.get('deal_id','')}). "
                 f"Аккаунт снова свободен.{tail}")
+            await review_request.ask_after_completion(
+                self.s, self.market, row.get("chat_id"), order_id=row.get("deal_id"))

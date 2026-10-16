@@ -802,6 +802,25 @@ class Backend:
                    bool(data.get("enabled")), interval_min * 60)
         return {"ok": True}
 
+    # ---------- просьба об отзыве (после успешной сделки) ----------
+    @_api
+    def review_get(self) -> dict:
+        from rentbot import review_request as rr
+        s = self._require()
+        return {"ok": True,
+                "enabled": s.get_setting(rr.ENABLED_KEY) == "1",
+                "text": s.get_setting(rr.TEXT_KEY) or "",
+                "default": rr.TEMPLATE}
+
+    @_api
+    def review_set(self, data: dict) -> dict:
+        from rentbot import review_request as rr
+        s = self._require()
+        s.set_setting(rr.ENABLED_KEY, "1" if data.get("enabled") else "0")
+        if "text" in data:
+            s.set_setting(rr.TEXT_KEY, (data.get("text") or "").strip())
+        return {"ok": True}
+
     # ---------- настройки (Telegram) ----------
     @staticmethod
     def _mask_tok(tok: str | None) -> str:

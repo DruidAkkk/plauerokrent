@@ -149,6 +149,27 @@ def test_blacklisted_buyer_blocked():
     print("PASS test_blacklisted_buyer_blocked")
 
 
+def test_review_request_off_by_default():
+    from rentbot.review_request import TEMPLATE
+    s, eng, mk, steam, note, clock = setup()
+    run(eng.on_order(order()))
+    clock.advance(2 * 3600 + 1)
+    run(eng.tick())
+    assert not any(TEMPLATE in t for _, t in mk.sent), "по умолчанию просьбы об отзыве быть не должно"
+    print("PASS test_review_request_off_by_default")
+
+
+def test_review_request_on_completion():
+    from rentbot.review_request import TEMPLATE
+    s, eng, mk, steam, note, clock = setup()
+    s.set_setting("review_request_enabled", "1")
+    run(eng.on_order(order(deal="D1", buyer="B1", chat="C1")))
+    clock.advance(2 * 3600 + 1)
+    run(eng.tick())
+    assert any(c == "C1" and TEMPLATE in t for c, t in mk.sent), "просьба об отзыве не отправлена"
+    print("PASS test_review_request_on_completion")
+
+
 def test_code_only_during_rent():
     s, eng, mk, *_ = setup()
     run(eng.on_chat("fake", "CX", "BX", "!код"))      # аренды нет

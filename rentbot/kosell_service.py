@@ -13,6 +13,7 @@ import asyncio
 import time
 from datetime import datetime, timezone
 
+from . import review_request
 from .adapters.kosell import KoSellClient, KoSellError
 from .ports import ChatMessage, Marketplace, Notifier, OrderEvent
 from .storage import Storage
@@ -214,3 +215,5 @@ class KoSellFulfiller:
                 await self.note.notify(
                     f"⌛ KoSell: аренда {row.get('product_name','')} истекла "
                     f"(заказ {row.get('deal_id','')}). Доступ закрыт.")
+                await review_request.ask_after_completion(
+                    self.s, self.market, row.get("chat_id"), order_id=row.get("deal_id"))
