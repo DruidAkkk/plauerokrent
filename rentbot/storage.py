@@ -734,6 +734,27 @@ class Storage:
         rows = self.db.execute("SELECT * FROM mobile_rentals WHERE status='active' AND expires<=?", (now,))
         return [dict(r) for r in rows]
 
+    # ---------- CRM покупателей (по Steam-арендам, где известна личность покупателя) ----------
+    def buyers_crm(self, marketplace: str | None = None) -> list[dict]:
+        """История покупателей: число сделок, суммарная выручка (LTV), первая/последняя сделка.
+
+        Считаем по таблице rentals (в KoSell/PUBG личность покупателя на нашей стороне не
+        хранится). Исключаем служебные записи блокировки по ЧС (state='cancelled' при пустом
+        account_id); продления (cancelled, но с account_id) и очередь — считаем как сделки."""
+        where = "NOT (state='cancelled' AND account_id IS NULL)"
+        params: list = []
+        if marketplace:
+            where += " AND marketplace=?"
+            params.append(marketplace)
+        rows = self.db.execute(
+            "SELECT buyer_id, MAX(buyer_name) AS buyer_name, COUNT(*) AS deals, "
+            "COALESCE(SUM(price),0) AS ltv, MIN(started_at) AS first_seen, "
+            "MAX(started_at) AS last_seen FROM rentals WHERE " + where +
+            " GROUP BY buyer_id ORDER BY ltv DESC, deals DESC", params)
+        return [{"buyer_id": r["buyer_id"], "buyer_name": r["buyer_name"],
+                 "deals": r["deals"], "ltv": r["ltv"],
+                 "first_seen": r["first_seen"], "last_seen": r["last_seen"]} for r in rows]
+
     # ---------- stats ----------
     def stats(self, since: float) -> dict:
         r = self.db.execute("SELECT COUNT(*) n, COALESCE(SUM(price),0) rev FROM rentals "

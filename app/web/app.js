@@ -725,12 +725,12 @@ async function renderRepricerKosell() {
 
 /* оболочка плагина аренды: шапка + под-вкладки */
 const RENTAL_TABS = [["rentals", "⏱️ Аренды"], ["lots", "🏷️ Лоты"], ["accounts", "👤 Аккаунты"],
-                     ["rlogs", "📜 Логи аренды"], ["blacklist", "🚫 Чёрный список"], ["rsettings", "🔧 Настройки"]];
+                     ["crm", "👥 Покупатели"], ["rlogs", "📜 Логи аренды"], ["blacklist", "🚫 Чёрный список"], ["rsettings", "🔧 Настройки"]];
 let rentalTab = "rentals";
 function openRentalPlugin() { rentalTab = "rentals"; renderRentalTab(); }
 function renderRentalTab() {
   ({ rentals: renderRentalsTab, lots: renderLotsTab, accounts: renderAccountsTab,
-     rlogs: renderRentalLogsTab, blacklist: renderRentalBlacklistTab, rsettings: renderRentalSettingsTab
+     crm: renderRentalCrmTab, rlogs: renderRentalLogsTab, blacklist: renderRentalBlacklistTab, rsettings: renderRentalSettingsTab
   }[rentalTab] || renderRentalsTab)();
 }
 VIEWS.rental = renderRentalTab;
@@ -1319,6 +1319,48 @@ async function renderScopedBlacklist(scope, shellFn, activeTab, rerender) {
 function renderRentalBlacklistTab() { renderScopedBlacklist("steam", pluginMain, "blacklist", renderRentalBlacklistTab); }
 function renderKoBlacklistTab() { renderScopedBlacklist("kosell", koPluginMain, "kbl", renderKoBlacklistTab); }
 function renderMobBlacklistTab() { renderScopedBlacklist("mobile", mobPluginMain, "mbl", renderMobBlacklistTab); }
+
+/* ---- CRM покупателей (Steam-аренда) ---- */
+async function renderRentalCrmTab() {
+  const r = await api("buyers_crm");
+  const items = (r && r.items) || [];
+  const dt = (ts) => ts ? new Date(ts * 1000).toLocaleDateString("ru-RU") : "—";
+  const rows = items.length ? items.map((b) => `
+    <tr>
+      <td>${esc(b.buyer_name || "—")}<div class="mono sub">${esc(b.buyer_id)}</div></td>
+      <td>${b.deals}</td>
+      <td><b>${money(b.ltv)}</b> ₽</td>
+      <td>${dt(b.first_seen)}</td>
+      <td>${dt(b.last_seen)}</td>
+      <td>${b.blacklisted ? `<span style="color:var(--amber)">🚫 в ЧС</span>` : `<span class="sub">ок</span>`}</td>
+      <td>${b.blacklisted
+             ? `<button class="btn sm ghost" data-crm-unbl="${esc(b.buyer_id)}">Убрать из ЧС</button>`
+             : `<button class="btn sm" data-crm-bl="${esc(b.buyer_id)}" data-crm-name="${esc(b.buyer_name || "")}">В ЧС</button>`}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty">Пока нет покупателей — появятся после первых аренд.</td></tr>`;
+  pluginMain("crm", `
+    <div class="sub" style="margin:-6px 0 14px;line-height:1.5">История клиентов Steam-аренды: сколько раз покупали, суммарная выручка (LTV), первая и последняя сделка. Постоянные — сверху (им можно давать приоритет), проблемных — в ЧС одной кнопкой.</div>
+    <div class="card"><div class="body">
+      <table><thead><tr><th>Покупатель</th><th>Сделок</th><th>LTV</th><th>Первая</th><th>Последняя</th><th>Статус</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div></div>
+  `);
+  document.querySelectorAll("[data-crm-bl]").forEach((btn) => (btn.onclick = () => {
+    const id = btn.dataset.crmBl;
+    modal("Добавить покупателя в ЧС", `
+      <div class="field"><label>Покупатель</label><input value="${esc(btn.dataset.crmName || id)}" disabled></div>
+      <div class="field"><label>Причина — за что в ЧС *</label><input id="crm-reason" placeholder="не вернул аккаунт, чарджбэк, угон…"></div>
+      <div class="form-err" id="crm-err"></div>
+    `, async () => {
+      if (!$("#crm-reason").value.trim()) { $("#crm-err").textContent = "Укажите причину — за что добавляете"; return false; }
+      const res = await api("blacklist_add", { scope: "steam", buyer_id: id, reason: $("#crm-reason").value });
+      if (res.ok) { toast("Добавлен в ЧС", "ok"); closeModal(); renderRentalCrmTab(); }
+      else { $("#crm-err").textContent = res.error; return false; }
+    }, "Добавить");
+  }));
+  document.querySelectorAll("[data-crm-unbl]").forEach((btn) => (btn.onclick = async () => {
+    await api("blacklist_remove", "steam", "playerok", btn.dataset.crmUnbl); toast("Убран из ЧС", "ok"); renderRentalCrmTab();
+  }));
+}
 
 /* ---------- настройки аренды ---------- */
 async function renderRentalSettingsTab() {

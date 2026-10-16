@@ -376,6 +376,15 @@ class Backend:
             },
         }
 
+    # ---------- CRM покупателей (Steam-аренда) ----------
+    @_api
+    def buyers_crm(self) -> dict:
+        s = self._require()
+        items = s.buyers_crm("playerok")
+        for it in items:
+            it["blacklisted"] = s.is_blacklisted("steam", "playerok", it["buyer_id"])
+        return {"ok": True, "items": items}
+
     # ---------- экспорт продаж в CSV ----------
     def _save_dialog(self, default_name: str) -> str | None:
         """Нативный диалог «Сохранить». None — пользователь отменил. При недоступности окна
