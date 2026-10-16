@@ -376,6 +376,41 @@ class Backend:
             },
         }
 
+    # ---------- экспорт продаж в CSV ----------
+    def _save_dialog(self, default_name: str) -> str | None:
+        """Нативный диалог «Сохранить». None — пользователь отменил. При недоступности окна
+        (напр. не pywebview) — путь рядом с БД, чтобы экспорт всё равно сработал."""
+        try:
+            import webview
+            wins = getattr(webview, "windows", None)
+            if wins:
+                res = wins[0].create_file_dialog(
+                    webview.SAVE_DIALOG, save_filename=default_name, file_types=("CSV (*.csv)",))
+                if not res:
+                    return None  # отмена
+                return res if isinstance(res, str) else res[0]
+        except Exception:  # noqa: BLE001 — падение диалога не должно ронять экспорт
+            pass
+        return os.path.join(os.path.dirname(self.db_path) or ".", default_name)
+
+    @_api
+    def export_sales_csv(self) -> dict:
+        from rentbot import export
+        s = self._require()
+        rows = export.sales_rows(s)
+        if not rows:
+            return {"error": "Пока нет продаж для экспорта"}
+        default_name = time.strftime("rentbot_sales_%Y%m%d_%H%M.csv")
+        path = self._save_dialog(default_name)
+        if not path:
+            return {"ok": False, "cancelled": True}
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(export.sales_csv(s))
+        s.log("export_sales", data={"rows": len(rows), "path": os.path.basename(path)})
+        return {"ok": True, "path": path, "rows": len(rows)}
+
     # ---------- аккаунты ----------
     def _acc_public(self, a: Account) -> dict:
         """Безопасная проекция аккаунта для UI — без расшифрованных секретов."""

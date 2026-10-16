@@ -214,7 +214,19 @@ VIEWS.dashboard = async () => {
     <div class="card"><h3>Загрузка аккаунтов Steam</h3><div class="body">
       <table><thead><tr><th>Логин</th><th>Аренд</th><th>Выручка</th><th>Загрузка</th></tr></thead><tbody>${rows}</tbody></table>
     </div></div>
+    <div class="card"><h3>📤 Экспорт</h3><div class="body" style="padding:16px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn primary" id="dash-export-csv">Экспорт продаж в CSV</button>
+      <span class="sub">Все продажи по плагинам (Steam / KoSell / PUBG) одной таблицей — открывается в Excel/Google Sheets.</span>
+    </div></div>
   `);
+  $("#dash-export-csv").onclick = async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    const r = await api("export_sales_csv");
+    btn.disabled = false;
+    if (r.ok) toast(`Сохранено: ${r.rows} строк → ${r.path}`, "ok");
+    else if (r.cancelled) { /* тихо */ }
+    else toast(r.error || "ошибка", "err");
+  };
 };
 
 /* ---------- аккаунты ---------- */
