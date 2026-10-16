@@ -647,12 +647,17 @@ class Backend:
             out[st.value] = [self._rent_public(r) for r in s.rentals_by_state(st)]
         return {"ok": True, "groups": out}
 
-    # ---------- чёрный список (общий + локальные правки) ----------
+    # ---------- чёрный список (у каждой аренды свой: scope = steam | kosell | mobile) ----------
+    _BL_SCOPES = ("steam", "kosell", "mobile")
+
+    def _bl_scope(self, scope) -> str:
+        return scope if scope in self._BL_SCOPES else "steam"
+
     @_api
-    def blacklist_list(self) -> dict:
+    def blacklist_list(self, scope: str = "steam") -> dict:
         s = self._require()
-        return {"ok": True, "items": s.blacklist_list(),
-                "apply_common": s.get_setting("blacklist_apply_common") == "1"}
+        return {"ok": True, "scope": self._bl_scope(scope),
+                "items": s.blacklist_list(self._bl_scope(scope))}
 
     @_api
     def blacklist_add(self, data: dict) -> dict:
@@ -661,42 +666,18 @@ class Backend:
         if not bid:
             return {"error": "Нужен ID (или имя) покупателя"}
         reason = (data.get("reason") or "").strip() or "без причины"
-        # scope: "global" — в общий ЧС (применяется только при включённом тумблере),
-        # иначе "local" — свой ЧС (блокирует всегда). По умолчанию свой.
-        scope = "global" if data.get("scope") == "global" else "local"
-        s.blacklist_add(data.get("marketplace") or "playerok", bid, reason, source=scope)
-        s.log("blacklist_add", data={"buyer": bid, "reason": reason, "scope": scope})
+        scope = self._bl_scope(data.get("scope"))
+        s.blacklist_add(scope, data.get("marketplace") or "playerok", bid, reason)
+        s.log("blacklist_add", data={"scope": scope, "buyer": bid, "reason": reason})
         return {"ok": True}
 
     @_api
-    def blacklist_set_apply_common(self, enabled) -> dict:
-        """Тумблер «применять общий ЧС». По умолчанию выкл — общий ЧС не блокирует."""
+    def blacklist_remove(self, scope: str, marketplace: str, buyer_id: str) -> dict:
         s = self._require()
-        s.set_setting("blacklist_apply_common", "1" if enabled else "0")
-        s.log("blacklist_apply_common", data={"on": bool(enabled)})
+        sc = self._bl_scope(scope)
+        s.blacklist_remove(sc, marketplace or "playerok", str(buyer_id))
+        s.log("blacklist_remove", data={"scope": sc, "buyer": buyer_id})
         return {"ok": True}
-
-    @_api
-    def blacklist_remove(self, marketplace: str, buyer_id: str) -> dict:
-        s = self._require()
-        s.blacklist_remove_local(marketplace or "playerok", str(buyer_id))
-        s.log("blacklist_remove", data={"buyer": buyer_id})
-        return {"ok": True}
-
-    @_api
-    def blacklist_sync(self) -> dict:
-        """Подтянуть общий ЧС (единый для всех продавцов). Локальные правки сохраняются."""
-        s = self._require()
-        from rentbot.blacklist_source import fetch_global_blacklist
-        url = s.get_setting("global_bl_url")
-        token = s.get_setting("global_bl_token")
-        try:
-            entries, src = fetch_global_blacklist(url, token)
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"не удалось получить общий ЧС: {e}"}
-        added = s.blacklist_sync_global(entries)
-        s.log("blacklist_sync", data={"source": src, "added": added, "total": len(entries)})
-        return {"ok": True, "added": added, "total": len(entries), "source": src}
 
     # ---------- настройки аренды (плагин) ----------
     @_api

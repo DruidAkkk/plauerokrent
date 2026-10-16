@@ -74,7 +74,7 @@ class RentalEngine:
         # Чёрный список: скамеру аккаунт НЕ выдаём. Сделку помечаем CANCELLED (идемпотентно и
         # вне очереди — _drain_queues её не подхватит), зовём владельца. Покупателю не пишем,
         # чтобы не подсказывать скамеру; решение по сделке — за владельцем.
-        if self.s.is_blacklisted(ev.marketplace, ev.buyer_id):
+        if self.s.is_blacklisted("steam", ev.marketplace, ev.buyer_id):
             marker = Rental(None, ev.marketplace, ev.deal_id, ev.lot_id, ev.buyer_id,
                             ev.buyer_name, ev.chat_id, None, RentalState.CANCELLED,
                             self.now(), self.now(), ev.price)

@@ -283,11 +283,11 @@ VIEWS.plugins = async () => {
 };
 
 /* ===================== Плагин Аренда PUBG Mobile ===================== */
-const MOB_TABS = [["accounts", "👤 Аккаунты"], ["lots", "🏷️ Лоты"], ["rentals", "⏱️ Аренды"], ["roadmap", "🗺️ Дальше"]];
+const MOB_TABS = [["accounts", "👤 Аккаунты"], ["lots", "🏷️ Лоты"], ["rentals", "⏱️ Аренды"], ["mbl", "🚫 Чёрный список"], ["roadmap", "🗺️ Дальше"]];
 const MOB_LOGIN = { facebook: "Facebook", google: "Google", twitter: "Twitter/X", vk: "VK", apple: "Apple", email: "Почта/телефон" };
 let mobTab = "accounts";
 function openMobilePlugin() { mobTab = "accounts"; renderMobTab(); }
-function renderMobTab() { ({ accounts: renderMobAccounts, lots: renderMobLots, rentals: renderMobRentals, roadmap: renderMobRoadmap }[mobTab] || renderMobAccounts)(); }
+function renderMobTab() { ({ accounts: renderMobAccounts, lots: renderMobLots, rentals: renderMobRentals, mbl: renderMobBlacklistTab, roadmap: renderMobRoadmap }[mobTab] || renderMobAccounts)(); }
 VIEWS.mobile = renderMobTab;
 
 function mobPluginMain(active, body) {
@@ -525,7 +525,7 @@ function renderMobRoadmap() {
       <ul class="sub" style="padding-left:20px">
         <li>Автосмена пароля соц-логина при возврате (зависит от провайдера).</li>
         <li>Гарантия/очередь, если в пуле нет свободных (частично уже: открывается гарантийный случай).</li>
-        <li>Привязка к общему чёрному списку покупателей.</li>
+        <li>Свой чёрный список покупателей — уже есть (вкладка «Чёрный список» этого плагина).</li>
       </ul>
     </div></div>
   `);
@@ -670,12 +670,12 @@ async function renderRepricerKosell() {
 
 /* оболочка плагина аренды: шапка + под-вкладки */
 const RENTAL_TABS = [["rentals", "⏱️ Аренды"], ["lots", "🏷️ Лоты"], ["accounts", "👤 Аккаунты"],
-                     ["rlogs", "📜 Логи аренды"], ["rsettings", "🔧 Настройки"]];
+                     ["rlogs", "📜 Логи аренды"], ["blacklist", "🚫 Чёрный список"], ["rsettings", "🔧 Настройки"]];
 let rentalTab = "rentals";
 function openRentalPlugin() { rentalTab = "rentals"; renderRentalTab(); }
 function renderRentalTab() {
   ({ rentals: renderRentalsTab, lots: renderLotsTab, accounts: renderAccountsTab,
-     rlogs: renderRentalLogsTab, rsettings: renderRentalSettingsTab
+     rlogs: renderRentalLogsTab, blacklist: renderRentalBlacklistTab, rsettings: renderRentalSettingsTab
   }[rentalTab] || renderRentalsTab)();
 }
 VIEWS.rental = renderRentalTab;
@@ -695,12 +695,12 @@ function pluginMain(activeTab, bodyHtml) {
 }
 
 /* ===================== Плагин KoSell-аренда ===================== */
-const KO_TABS = [["kmap", "🎮 Товары"], ["kactive", "⏱️ Активные аренды"], ["ksettings", "🔧 Настройки"]];
+const KO_TABS = [["kmap", "🎮 Товары"], ["kactive", "⏱️ Активные аренды"], ["kbl", "🚫 Чёрный список"], ["ksettings", "🔧 Настройки"]];
 let koTab = "kmap";
 let koProducts = [];           // кэш каталога KoSell для формы маппинга
 function openKoSellPlugin() { koTab = "kmap"; renderKoTab(); }
 function renderKoTab() {
-  ({ kmap: renderKoMapTab, kactive: renderKoActiveTab, ksettings: renderKoSettingsTab }[koTab] || renderKoMapTab)();
+  ({ kmap: renderKoMapTab, kactive: renderKoActiveTab, kbl: renderKoBlacklistTab, ksettings: renderKoSettingsTab }[koTab] || renderKoMapTab)();
 }
 VIEWS.kosell = renderKoTab;
 
@@ -1226,83 +1226,44 @@ async function renderRentalLogsTab() {
   </div></div>`);
 }
 
-/* ---------- чёрный список (отдельная вкладка: свой + общий) ---------- */
-VIEWS.blacklist = renderBlacklist;
-async function renderBlacklist() {
-  const r = await api("blacklist_list");
-  if (r.error) return fail(r.error);
-  const applyCommon = !!r.apply_common;
-  const rows = r.items.length ? r.items.map((x) => {
-    const isGlobal = x.source === "global";
-    const active = x.enabled && (!isGlobal || applyCommon);
-    const status = !x.enabled
-      ? '<span class="badge-state s-paused">снят локально</span>'
-      : active
-        ? '<span class="badge-state s-quarantine">блокируется</span>'
-        : '<span class="badge-state s-paused">общий выкл</span>';
-    return `
+/* ---------- чёрный список аренды (у каждого плагина свой, scope) ---------- */
+// shellFn — оболочка плагина (pluginMain/koPluginMain/mobPluginMain); activeTab — ключ её вкладки;
+// rerender — функция перерисовки этой же вкладки.
+async function renderScopedBlacklist(scope, shellFn, activeTab, rerender) {
+  const r = await api("blacklist_list", scope);
+  const items = (r && r.items) || [];
+  const rows = items.length ? items.map((x) => `
     <tr>
       <td class="mono">${esc(x.buyer_id)}</td>
       <td>${esc(x.reason)}</td>
-      <td><span class="chip">${isGlobal ? "общий" : "свой"}</span></td>
-      <td>${status}</td>
-      <td>${x.enabled
-        ? `<button class="btn sm" data-bl-rm="${esc(x.buyer_id)}">Убрать</button>`
-        : `<button class="btn sm" data-bl-readd="${esc(x.buyer_id)}" data-reason="${esc(x.reason)}">Вернуть</button>`}</td>
-    </tr>`;
-  }).join("") : `<tr><td colspan="5" class="empty">Чёрный список пуст. Добавьте покупателя или синхронизируйте общий.</td></tr>`;
-
-  setMain("Чёрный список", "свой (блокирует всегда) и общий (включается тумблером)", `
-    <div class="card"><div class="body" style="padding:16px 18px">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
-        <input id="bl-apply" type="checkbox" ${applyCommon ? "checked" : ""} style="width:auto;margin:0">
-        Применять общий ЧС ко всем сделкам
-      </label>
-      <div class="sub" style="margin-top:8px;line-height:1.5"><b>Свой</b> ЧС блокирует арендатора <b>всегда</b>. <b>Общий</b> ЧС (единая база скамеров) по умолчанию <b>не применяется</b> — включите тумблер, чтобы он тоже блокировал. Любого из общего можно снять локально — при синхронизации он не вернётся.</div>
-    </div></div>
-    <div class="toolbar" style="margin-top:14px">
-      <button class="btn primary" id="bl-add">+ Добавить в ЧС</button>
-      <button class="btn" id="bl-sync">⟳ Синхронизировать общий ЧС</button>
-    </div>
+      <td><button class="btn sm" data-bl-rm="${esc(x.buyer_id)}">Убрать</button></td>
+    </tr>`).join("") : `<tr><td colspan="3" class="empty">ЧС пуст. Добавленный покупатель блокируется только в этой аренде.</td></tr>`;
+  shellFn(activeTab, `
+    <div class="toolbar"><button class="btn primary" id="bl-add">+ Добавить в ЧС</button></div>
+    <div class="sub" style="margin:-6px 0 14px;line-height:1.5">Свой чёрный список <b>этой аренды</b>. Скамеру автоматически не выдаём и зовём тебя. На другие плагины (аренды) не влияет — у каждой свой ЧС.</div>
     <div class="card"><div class="body">
-      <table><thead><tr><th>Покупатель (ID)</th><th>Причина (за что)</th><th>Список</th><th>Статус</th><th></th></tr></thead>
+      <table><thead><tr><th>Покупатель (ID)</th><th>Причина (за что)</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
     </div></div>
   `);
-
-  $("#bl-apply").onchange = async (e) => {
-    const res = await api("blacklist_set_apply_common", e.target.checked);
-    if (res.ok) { toast(e.target.checked ? "Общий ЧС применяется" : "Общий ЧС отключён", "ok"); renderBlacklist(); }
-    else { e.target.checked = !e.target.checked; toast(res.error || "ошибка", "err"); }
-  };
   $("#bl-add").onclick = () => modal("Добавить в чёрный список", `
     <div class="field"><label>ID покупателя *</label><input id="bl-id"></div>
     <div class="field"><label>Причина — за что в ЧС *</label><input id="bl-reason" placeholder="не вернул аккаунт, чарджбэк, угон…"></div>
-    <div class="field"><label>Куда добавить</label>
-      <select id="bl-scope">
-        <option value="local">Свой ЧС — блокирует всегда</option>
-        <option value="global">Общий ЧС — общая база (блокирует, только если включён тумблер)</option>
-      </select></div>
     <div class="form-err" id="bl-err"></div>
   `, async () => {
     if (!$("#bl-reason").value.trim()) { $("#bl-err").textContent = "Укажите причину — за что добавляете"; return false; }
-    const res = await api("blacklist_add", { buyer_id: $("#bl-id").value, reason: $("#bl-reason").value, scope: $("#bl-scope").value });
-    if (res.ok) { toast("Добавлен в ЧС", "ok"); closeModal(); renderBlacklist(); }
+    const res = await api("blacklist_add", { scope, buyer_id: $("#bl-id").value, reason: $("#bl-reason").value });
+    if (res.ok) { toast("Добавлен в ЧС", "ok"); closeModal(); rerender(); }
     else { $("#bl-err").textContent = res.error; return false; }
   }, "Добавить");
-  $("#bl-sync").onclick = async () => {
-    const res = await api("blacklist_sync");
-    if (res.error) return toast(res.error, "err");
-    toast(`Общий ЧС (${res.source}): +${res.added} из ${res.total}`, "ok");
-    renderBlacklist();
-  };
   document.querySelectorAll("[data-bl-rm]").forEach((b) => (b.onclick = async () => {
-    await api("blacklist_remove", "playerok", b.dataset.blRm); toast("Снят локально", "ok"); renderBlacklist();
-  }));
-  document.querySelectorAll("[data-bl-readd]").forEach((b) => (b.onclick = async () => {
-    await api("blacklist_add", { buyer_id: b.dataset.blReadd, reason: b.dataset.reason }); toast("Возвращён в блок", "ok"); renderBlacklist();
+    await api("blacklist_remove", scope, "playerok", b.dataset.blRm); toast("Убран из ЧС", "ok"); rerender();
   }));
 }
+
+function renderRentalBlacklistTab() { renderScopedBlacklist("steam", pluginMain, "blacklist", renderRentalBlacklistTab); }
+function renderKoBlacklistTab() { renderScopedBlacklist("kosell", koPluginMain, "kbl", renderKoBlacklistTab); }
+function renderMobBlacklistTab() { renderScopedBlacklist("mobile", mobPluginMain, "mbl", renderMobBlacklistTab); }
 
 /* ---------- настройки аренды ---------- */
 async function renderRentalSettingsTab() {

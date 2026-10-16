@@ -40,11 +40,10 @@ CREATE TABLE IF NOT EXISTS rentals (
 );
 CREATE INDEX IF NOT EXISTS rentals_state ON rentals(state, ends_at);
 CREATE TABLE IF NOT EXISTS blacklist (
+    scope TEXT NOT NULL DEFAULT 'steam',     -- steam | kosell | mobile: у каждой аренды свой ЧС
     marketplace TEXT NOT NULL, buyer_id TEXT NOT NULL, reason TEXT NOT NULL,
     created_at REAL NOT NULL,
-    source TEXT NOT NULL DEFAULT 'local',   -- local | global (с общего сервера продавцов)
-    enabled INTEGER NOT NULL DEFAULT 1,      -- 0 = локально снят (оверрайд общего списка)
-    PRIMARY KEY (marketplace, buyer_id)
+    PRIMARY KEY (scope, marketplace, buyer_id)
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL,
@@ -194,10 +193,25 @@ class Storage:
     def _migrate(self) -> None:
         """Лёгкие миграции для существующих БД (CREATE TABLE IF NOT EXISTS новые колонки не добавляет)."""
         bl_cols = {r[1] for r in self.db.execute("PRAGMA table_info(blacklist)")}
-        if "source" not in bl_cols:
-            self.db.execute("ALTER TABLE blacklist ADD COLUMN source TEXT NOT NULL DEFAULT 'local'")
-        if "enabled" not in bl_cols:
-            self.db.execute("ALTER TABLE blacklist ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+        if "scope" not in bl_cols:
+            # переход на ЧС-по-аренде: пересобираем таблицу со scope в ключе. Старые СВОИ активные
+            # записи переносим в ЧС Steam-аренды; записи общего ЧС (source=global) отбрасываем.
+            conds = []
+            if "enabled" in bl_cols:
+                conds.append("enabled=1")
+            if "source" in bl_cols:
+                conds.append("source!='global'")
+            where = (" WHERE " + " AND ".join(conds)) if conds else ""
+            self.db.execute(
+                "CREATE TABLE blacklist_new ("
+                " scope TEXT NOT NULL DEFAULT 'steam', marketplace TEXT NOT NULL,"
+                " buyer_id TEXT NOT NULL, reason TEXT NOT NULL, created_at REAL NOT NULL,"
+                " PRIMARY KEY (scope, marketplace, buyer_id))")
+            self.db.execute(
+                "INSERT OR IGNORE INTO blacklist_new (scope, marketplace, buyer_id, reason, created_at) "
+                "SELECT 'steam', marketplace, buyer_id, reason, created_at FROM blacklist" + where)
+            self.db.execute("DROP TABLE blacklist")
+            self.db.execute("ALTER TABLE blacklist_new RENAME TO blacklist")
 
     # ---------- accounts ----------
     def add_account(self, acc: Account) -> int:
@@ -362,71 +376,33 @@ class Storage:
             "WHERE r.state='queued' AND l.game=? ORDER BY r.id", (game,))
         return [self._row_to_rental(r) for r in rows]
 
-    # ---------- blacklist / log ----------
-    def is_blacklisted(self, marketplace: str, buyer_id: str) -> bool:
-        """Эффективно заблокирован = запись есть, включена (enabled=1) и применяется.
-        Записи из ОБЩЕГО ЧС (source='global') блокируют только если включён тумблер
-        «применять общий ЧС» (setting blacklist_apply_common=1). По умолчанию общий ЧС НЕ
-        применяется — блокирует только свой (локальный). Снятые локально (enabled=0) — не блокируют."""
-        row = self.db.execute(
-            "SELECT source, enabled FROM blacklist WHERE marketplace=? AND buyer_id=?",
-            (marketplace, buyer_id)).fetchone()
-        if row is None or not row["enabled"]:
-            return False
-        if row["source"] == "global" and self.get_setting("blacklist_apply_common") != "1":
-            return False
-        return True
+    # ---------- blacklist (у каждой аренды свой ЧС: scope = steam | kosell | mobile) ----------
+    BL_SCOPES = ("steam", "kosell", "mobile")
 
-    def blacklist_add(self, marketplace: str, buyer_id: str, reason: str,
-                      source: str = "local") -> None:
-        """Добавить/включить запись ЧС. Локальное добавление перекрывает выключенную запись."""
+    def is_blacklisted(self, scope: str, marketplace: str, buyer_id: str) -> bool:
+        """Заблокирован ли покупатель в ЧС конкретной аренды. У каждой аренды свой независимый
+        список — блок в одной (напр. steam) не влияет на другие (kosell/mobile)."""
+        return self.db.execute(
+            "SELECT 1 FROM blacklist WHERE scope=? AND marketplace=? AND buyer_id=?",
+            (scope, marketplace, buyer_id)).fetchone() is not None
+
+    def blacklist_add(self, scope: str, marketplace: str, buyer_id: str, reason: str) -> None:
+        """Добавить покупателя в ЧС конкретной аренды (идемпотентно, обновляет причину)."""
         self.db.execute(
-            "INSERT INTO blacklist (marketplace, buyer_id, reason, created_at, source, enabled) "
-            "VALUES (?,?,?,?,?,1) ON CONFLICT(marketplace, buyer_id) DO UPDATE SET "
-            "reason=excluded.reason, enabled=1, source=excluded.source",
-            (marketplace, buyer_id, reason, time.time(), source))
+            "INSERT INTO blacklist (scope, marketplace, buyer_id, reason, created_at) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(scope, marketplace, buyer_id) DO UPDATE SET "
+            "reason=excluded.reason",
+            (scope, marketplace, buyer_id, reason, time.time()))
 
-    def blacklist_remove_local(self, marketplace: str, buyer_id: str) -> None:
-        """Локально убрать из ЧС: локальную запись удаляем, запись из общего списка — выключаем
-        (enabled=0), чтобы повторная синхронизация не вернула её в блок."""
-        r = self.db.execute("SELECT source FROM blacklist WHERE marketplace=? AND buyer_id=?",
-                            (marketplace, buyer_id)).fetchone()
-        if r is None:
-            return
-        if r["source"] == "global":
-            self.db.execute("UPDATE blacklist SET enabled=0 WHERE marketplace=? AND buyer_id=?",
-                            (marketplace, buyer_id))
-        else:
-            self.db.execute("DELETE FROM blacklist WHERE marketplace=? AND buyer_id=?",
-                            (marketplace, buyer_id))
+    def blacklist_remove(self, scope: str, marketplace: str, buyer_id: str) -> None:
+        self.db.execute("DELETE FROM blacklist WHERE scope=? AND marketplace=? AND buyer_id=?",
+                        (scope, marketplace, buyer_id))
 
-    def blacklist_list(self) -> list[dict]:
-        rows = self.db.execute("SELECT * FROM blacklist ORDER BY enabled DESC, created_at DESC")
-        return [{"marketplace": r["marketplace"], "buyer_id": r["buyer_id"], "reason": r["reason"],
-                 "created_at": r["created_at"], "source": r["source"], "enabled": bool(r["enabled"])}
-                for r in rows]
-
-    def blacklist_sync_global(self, entries: list[dict]) -> int:
-        """Влить общий ЧС. Новые — добавляем (source=global, enabled=1). Уже снятые локально
-        (enabled=0) НЕ трогаем — уважаем решение продавца. Возвращает число новых записей."""
-        added = 0
-        for e in entries:
-            mk, bid = e.get("marketplace", "playerok"), str(e.get("buyer_id", ""))
-            if not bid:
-                continue
-            exists = self.db.execute("SELECT 1 FROM blacklist WHERE marketplace=? AND buyer_id=?",
-                                     (mk, bid)).fetchone()
-            if exists:
-                # обновим причину глобальной записи, но не меняем локальный enabled-оверрайд
-                self.db.execute("UPDATE blacklist SET reason=?, source='global' "
-                                "WHERE marketplace=? AND buyer_id=? AND source!='local'",
-                                (e.get("reason", ""), mk, bid))
-            else:
-                self.db.execute("INSERT INTO blacklist (marketplace, buyer_id, reason, created_at, source, enabled) "
-                                "VALUES (?,?,?,?, 'global', 1)",
-                                (mk, bid, e.get("reason", ""), time.time()))
-                added += 1
-        return added
+    def blacklist_list(self, scope: str) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT * FROM blacklist WHERE scope=? ORDER BY created_at DESC", (scope,))
+        return [{"marketplace": r["marketplace"], "buyer_id": r["buyer_id"],
+                 "reason": r["reason"], "created_at": r["created_at"]} for r in rows]
 
     def log(self, kind: str, rental_id: int | None = None, account_id: int | None = None, **data) -> None:
         self.db.execute("INSERT INTO events (ts, kind, rental_id, account_id, data) VALUES (?,?,?,?,?)",

@@ -43,7 +43,7 @@ class MobileFulfiller:
             return False
 
         # Чёрный список: скамеру автоматически не выдаём — зовём владельца.
-        if self.s.is_blacklisted(ev.marketplace, ev.buyer_id):
+        if self.s.is_blacklisted("mobile", ev.marketplace, ev.buyer_id):
             self.s.log("mobile_blacklisted", data={"deal": ev.deal_id, "buyer": ev.buyer_name})
             await self.note.notify(
                 f"🚫 Покупатель {ev.buyer_name} в чёрном списке — заказ {ev.deal_id} "

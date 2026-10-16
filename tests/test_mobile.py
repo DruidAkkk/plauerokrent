@@ -110,7 +110,7 @@ def test_foreign_chat_not_handled():
 
 def test_blacklisted_buyer_blocked():
     s, mk, note, f = _fixture(accounts=1)
-    s.blacklist_add("playerok", "B1", "скам", "local")  # buyer_id из _order = B1
+    s.blacklist_add("mobile", "playerok", "B1", "скам")  # ЧС PUBG Mobile; buyer_id из _order = B1
     assert run(f.handle_order(_order())) is True
     assert s.mobile_rental_by_deal("playerok", "D1") is None, "скамеру выдали аккаунт"
     assert s.mobile_list()[0]["state"] == "free", "аккаунт не должен уходить в аренду"
@@ -202,18 +202,19 @@ def test_expiry_autokick_unsupported_still_frees():
     print("PASS test_expiry_autokick_unsupported_still_frees")
 
 
-def test_common_blacklist_respects_apply_toggle():
+def test_blacklist_is_per_rental_scope():
     s, mk, note, f = _fixture()
-    # общий (global) по умолчанию НЕ применяется
-    s.blacklist_add("playerok", "G1", "скам", "global")
-    assert s.is_blacklisted("playerok", "G1") is False, "общий ЧС не должен блокировать по умолчанию"
-    s.set_setting("blacklist_apply_common", "1")
-    assert s.is_blacklisted("playerok", "G1") is True, "при включённом тумблере общий должен блокировать"
-    # свой (local) блокирует всегда, независимо от тумблера
-    s.set_setting("blacklist_apply_common", "0")
-    s.blacklist_add("playerok", "L1", "скам", "local")
-    assert s.is_blacklisted("playerok", "L1") is True, "свой ЧС должен блокировать всегда"
-    print("PASS test_common_blacklist_respects_apply_toggle")
+    # у каждой аренды свой независимый ЧС: блок в одной не влияет на другие
+    s.blacklist_add("mobile", "playerok", "X1", "скам")
+    assert s.is_blacklisted("mobile", "playerok", "X1") is True, "в своём scope должен блокировать"
+    assert s.is_blacklisted("steam", "playerok", "X1") is False, "в чужом scope блока быть не должно"
+    assert s.is_blacklisted("kosell", "playerok", "X1") is False, "в чужом scope блока быть не должно"
+    # список и удаление тоже по scope
+    assert [r["buyer_id"] for r in s.blacklist_list("mobile")] == ["X1"]
+    assert s.blacklist_list("steam") == []
+    s.blacklist_remove("mobile", "playerok", "X1")
+    assert s.is_blacklisted("mobile", "playerok", "X1") is False
+    print("PASS test_blacklist_is_per_rental_scope")
 
 
 if __name__ == "__main__":

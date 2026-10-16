@@ -127,7 +127,7 @@ def test_foreign_chat_not_handled():
 
 def test_blacklisted_buyer_blocked():
     s, mk, note, f = _fixture()
-    s.blacklist_add("playerok", "B1", "скам", "local")  # buyer_id из _order = B1
+    s.blacklist_add("kosell", "playerok", "B1", "скам")  # ЧС KoSell; buyer_id из _order = B1
     assert run(f.handle_order(_order())) is True
     assert s.kosell_rental_by_deal("playerok", "DEAL1") is None, "скамеру выдали аренду"
     assert f.client.rented == [], "аренда у KoSell не должна браться"

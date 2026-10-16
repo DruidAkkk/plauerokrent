@@ -60,7 +60,7 @@ class KoSellFulfiller:
             return False  # не наш лот — пусть идёт по другим путям воркера
 
         # Чёрный список: скамеру автоматически не выдаём — зовём владельца.
-        if self.s.is_blacklisted(ev.marketplace, ev.buyer_id):
+        if self.s.is_blacklisted("kosell", ev.marketplace, ev.buyer_id):
             self.s.log("kosell_blacklisted", data={"deal": ev.deal_id, "buyer": ev.buyer_name})
             await self.note.notify(
                 f"🚫 Покупатель {ev.buyer_name} в чёрном списке — заказ {ev.deal_id} "

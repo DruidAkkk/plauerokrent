@@ -141,7 +141,7 @@ def test_autokick_fail_falls_back_to_rotation():
 
 def test_blacklisted_buyer_blocked():
     s, eng, mk, steam, note, clock = setup()
-    s.blacklist_add("fake", "B1", "скам", "local")   # buyer_id из order() = B1
+    s.blacklist_add("steam", "fake", "B1", "скам")   # ЧС Steam-аренды; buyer_id из order() = B1
     run(eng.on_order(order()))
     assert s.get_account(1).state == AccountState.FREE, "скамеру не должны выдавать аккаунт"
     assert not any("Логин" in t for _, t in mk.sent), "скамеру не должен уйти доступ"
