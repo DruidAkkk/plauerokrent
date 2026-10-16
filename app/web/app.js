@@ -268,7 +268,7 @@ VIEWS.plugins = async () => {
         </div>
       </div>
       <div class="card" style="margin:0;cursor:pointer" id="plg-review">
-        <h3 style="border:none">⭐ Просьба об отзыве</h3>
+        <h3 style="border:none">⭐ Напоминание об отзыве</h3>
         <div class="body" style="padding:0 18px 16px">
           <span class="badge-state s-active" id="plg-review-badge">активен</span>
           <p class="sub" style="margin:12px 0 14px;line-height:1.5">После успешного завершения аренды (Steam / KoSell / PUBG) бот вежливо просит покупателя оставить отзыв. Текст сообщения настраивается. По умолчанию выключено.</p>
@@ -606,17 +606,17 @@ async function renderWarranty() {
   }));
 }
 
-/* ---- плагин Просьба об отзыве ---- */
+/* ---- плагин Напоминание об отзыве ---- */
 const REVIEW_SUB = "вежливая просьба об отзыве после успешного завершения аренды";
 VIEWS.review = renderReview;
 async function renderReview() {
-  simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB,
+  simplePluginShell("⭐ Напоминание об отзыве", REVIEW_SUB,
     `<div class="card"><div class="body" style="padding:18px">Загрузка…</div></div>`);
   const r = await api("review_get");
-  if (!r.ok) return simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB,
+  if (!r.ok) return simplePluginShell("⭐ Напоминание об отзыве", REVIEW_SUB,
     `<div class="card"><div class="body" style="padding:18px;color:var(--amber)">⚠️ ${esc(r.error || "ошибка")}</div></div>`);
   const text = r.text || r.default || "";
-  simplePluginShell("⭐ Просьба об отзыве", REVIEW_SUB, `
+  simplePluginShell("⭐ Напоминание об отзыве", REVIEW_SUB, `
     <div class="card"><h3>⚙️ Настройки</h3><div class="body" style="padding:18px">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
         <input type="checkbox" id="rev-en" ${r.enabled ? "checked" : ""} style="width:auto">
