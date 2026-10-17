@@ -21,6 +21,7 @@ import threading
 import time
 from pathlib import Path
 
+from rentbot import __version__ as APP_VERSION
 from rentbot.domain import Account, AccountState, LotBinding, RentalState, RotationMode
 from rentbot.storage import Storage
 from rentbot.vault import ENV_SALT, ENV_SECRET, Vault, env_configured
@@ -165,7 +166,73 @@ class Backend:
             "worker": bool(self._worker and self._worker.is_running()),
             "worker_error": getattr(self._worker, "last_error", None),
             "db_path": self.db_path,
+            "version": APP_VERSION,
         }
+
+    # ---------- обновления (GitHub Releases) ----------
+    def check_update(self) -> dict:
+        """Сравнить текущую версию с последним GitHub-релизом. НЕ @_api (сеть вне лока, БД не нужна)."""
+        from rentbot import updater
+
+        def fetch():
+            from curl_cffi import requests as cffi
+            r = cffi.get(updater.API_LATEST, impersonate="chrome", timeout=15,
+                         headers={"Accept": "application/vnd.github+json",
+                                  "User-Agent": "rentbot-updater"})
+            return r.json()
+
+        res = self._run_net(fetch, timeout=20)
+        if "error" in res:
+            return {"ok": False, "error": res["error"], "current": APP_VERSION}
+        data = res.get("val")
+        if not isinstance(data, dict) or not (data.get("tag_name") or data.get("name")):
+            # релизов ещё нет — это не ошибка
+            return {"ok": True, "update_available": False, "current": APP_VERSION,
+                    "latest": APP_VERSION, "url": updater.RELEASES_PAGE,
+                    "asset_url": None, "notes": ""}
+        return {"ok": True, **updater.summarize_release(data, APP_VERSION)}
+
+    def download_and_run_update(self, asset_url: str | None = None) -> dict:
+        """Скачать установщик нового релиза во временную папку и запустить его (1 клик).
+
+        Запускает штатный Inno-установщик (тот же AppId → апгрейд поверх, БД в LOCALAPPDATA цела).
+        НЕ @_api: сеть и запуск процесса — вне лока."""
+        from rentbot import updater
+        if not asset_url:
+            chk = self.check_update()
+            if not chk.get("ok"):
+                return chk
+            asset_url = chk.get("asset_url")
+            if not asset_url:
+                return {"error": "у релиза нет установщика (.exe) — обновите вручную со страницы релиза",
+                        "url": chk.get("url")}
+
+        def download() -> str:
+            import tempfile
+            from curl_cffi import requests as cffi
+            r = cffi.get(asset_url, impersonate="chrome", timeout=180,
+                         headers={"User-Agent": "rentbot-updater"})
+            if r.status_code != 200 or not r.content:
+                raise RuntimeError(f"скачивание не удалось (HTTP {r.status_code})")
+            path = os.path.join(tempfile.gettempdir(), "rentbot-Setup-update.exe")
+            with open(path, "wb") as f:
+                f.write(r.content)
+            return path
+
+        res = self._run_net(download, timeout=200)
+        if "error" in res:
+            return {"error": res["error"]}
+        path = res["val"]
+        try:
+            os.startfile(path)  # type: ignore[attr-defined]  # Windows: запустить установщик
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"не удалось запустить установщик: {e}", "path": path}
+        try:
+            if self.storage is not None:
+                self.storage.log("update_launched", data={"path": os.path.basename(path)})
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": True, "path": path}
 
     def env_unlock(self) -> dict:
         """Открыть хранилище ключом из env (для панели на той же VPS, что и воркер). Без пароля.

@@ -81,6 +81,37 @@ function enterApp() {
   $("#app").classList.add("show");
   refreshWorker();
   go("dashboard");
+  setTimeout(checkUpdatesOnStartup, 1500);  // тихая проверка обновлений, UI не блокируем
+}
+
+/* ---------- обновления (GitHub Releases) ---------- */
+let _updateChecked = false;
+async function checkUpdatesOnStartup() {
+  if (_updateChecked) return;
+  _updateChecked = true;
+  let u;
+  try { u = await api("check_update"); } catch (e) { return; }  // молча: нет сети — не мешаем
+  if (u && u.ok && u.update_available) showUpdatePrompt(u);
+}
+
+function showUpdatePrompt(u) {
+  const notes = (u.notes || "").slice(0, 400);
+  modal(`Доступно обновление — ${esc(u.latest)}`, `
+    <div class="field">Установлена версия <b>${esc(u.current)}</b>, вышла <b>${esc(u.latest)}</b>.</div>
+    ${notes ? `<div class="field"><label>Что нового</label><div class="sub" style="white-space:pre-wrap;max-height:160px;overflow:auto">${esc(notes)}</div></div>` : ""}
+    <div class="field tip">Скачается установщик и запустится. Твои настройки и база сохранятся. После установки запусти приложение заново.</div>
+  `, async () => { runUpdate(u.asset_url, u.url); return true; }, "Обновить сейчас");
+}
+
+async function runUpdate(assetUrl, pageUrl) {
+  toast("Скачиваю обновление…", "");
+  const r = await api("download_and_run_update", assetUrl || null);
+  if (r && r.ok) {
+    toast("Установщик запущен — закрой приложение, чтобы он завершил обновление.", "ok");
+  } else {
+    toast((r && r.error) || "Не удалось обновить", "err");
+    if (pageUrl || (r && r.url)) toast("Можно скачать вручную со страницы релиза", "");
+  }
 }
 
 async function initLock() {
@@ -1531,6 +1562,7 @@ VIEWS.settings = async () => {
   const s = await api("settings_get");
   if (s.error) return fail(s.error);
   const sec = await api("security_get");
+  const stt = await api("status");
   setMain("Настройки", "подключения, безопасность и уведомления", `
     <div class="card"><h3>🔒 Безопасность входа</h3><div class="body" style="padding:18px">
       <div class="field" style="margin-bottom:14px"><label>Логин</label>
@@ -1585,7 +1617,30 @@ VIEWS.settings = async () => {
         <input id="st-chat" value="${esc(s.tg_chat)}" placeholder="узнать у @userinfobot"></div>
       <button class="btn primary" id="st-save">Сохранить</button>
     </div></div>
+
+    <div class="card"><h3>⬆️ О программе и обновления</h3><div class="body" style="padding:18px">
+      <p class="sub" style="margin-bottom:14px">Версия приложения: <b>${esc((stt && stt.version) || "—")}</b></p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn" id="upd-check">⟳ Проверить обновления</button>
+        <span id="upd-res" class="sub"></span>
+      </div>
+      <div class="tip" style="margin-top:12px">Обновления берутся из релизов на GitHub. При наличии новой версии установщик скачается и запустится в один клик; настройки и база сохранятся.</div>
+    </div></div>
   `);
+  // проверка обновлений
+  $("#upd-check").onclick = async () => {
+    const btn = $("#upd-check"), res = $("#upd-res");
+    btn.disabled = true; res.textContent = "проверяю…"; res.style.color = "var(--text-dim)";
+    const u = await api("check_update");
+    btn.disabled = false;
+    if (!u || !u.ok) { res.textContent = "✗ " + ((u && u.error) || "не удалось проверить"); res.style.color = "var(--amber)"; return; }
+    if (u.update_available) {
+      res.innerHTML = `<span style="color:var(--green)">доступна версия ${esc(u.latest)}</span>`;
+      showUpdatePrompt(u);
+    } else {
+      res.innerHTML = `<span style="color:var(--green)">✓ у вас последняя версия</span>`;
+    }
+  };
   // безопасность входа
   $("#sec-save").onclick = async () => {
     const r = await api("security_set", { username: $("#sec-user").value, twofa_enabled: $("#sec-2fa").checked });
